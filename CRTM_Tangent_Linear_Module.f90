@@ -902,7 +902,7 @@ CONTAINS
         DO l = 1, n_sensor_channels
           IF ( .NOT. ChannelInfo(n)%Process_Channel(l) ) THEN
 !            nt = l / chunk_ch + 1
-            nt = FLOOR( REAL(l) / REAL(chunk_ch) ) + 1
+            nt = FLOOR( REAL(l-1) / REAL(chunk_ch) ) + 1
             n_inactive_channels(nt) = n_inactive_channels(nt) + 1
           END IF
         END DO

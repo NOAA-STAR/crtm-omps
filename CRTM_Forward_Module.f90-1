@@ -361,6 +361,7 @@ CONTAINS
     ! ------------
     ! PROFILE LOOPS
     ! ------------
+    
 !JR First loop just checks validity of Atmosphere(m) contents
 !$OMP PARALLEL DO PRIVATE ( nc, Message ) NUM_THREADS(n_profile_threads)
     Profile_Loop1: DO m = 1, n_Profiles
@@ -780,6 +781,7 @@ CONTAINS
           ! Allocate the RTV structure if necessary
           IF( ( Atm%n_Clouds   > 0 .OR. &
                 Atm%n_Aerosols > 0 .OR. &
+                SpcCoeff_IsUltravioletSensor(SC(SensorIndex)) .OR. &
                 SpcCoeff_IsVisibleSensor(SC(SensorIndex)) ) .AND. &
                 AtmOptics(nt)%Include_Scattering ) THEN
             CALL RTV_Create( RTV(nt), MAX_N_ANGLES, MAX_N_LEGENDRE_TERMS, Atm%n_Layers )
@@ -900,7 +902,8 @@ CONTAINS
               IF ( CRTM_Atmosphere_IsFractional(cloud_coverage_flag) ) RTV_Clear%Solar_Flag_true = .TRUE.
             END IF
             ! ...Visible channel with solar radiation
-            IF ( SpcCoeff_IsVisibleSensor(SC(SensorIndex)) .AND. RTV(nt)%Solar_Flag_true ) THEN
+          IF ( (SpcCoeff_IsVisibleSensor(SC(SensorIndex)).or.SpcCoeff_IsUltravioletSensor(SC(SensorIndex))) &
+                .AND. RTV(nt)%Solar_Flag_true ) THEN
               RTV%Visible_Flag_true = .TRUE.
               ! Rayleigh phase function has 0, 1, 2 components.
               IF( AtmOptics(nt)%n_Legendre_Terms < 4 ) THEN
@@ -1054,9 +1057,7 @@ CONTAINS
 !  RTSolution(ln,m)%Up_Radiance: delta
 !  RTSolution(ln,m)%Down_Radiance: beta
    IF( Options_Present ) THEN
-      print *,' FWD2 ',nt,size(RTV(nt)%s_Level_Refl_UP, DIM=1),size(RTV(nt)%s_Level_Refl_UP, DIM=2)
      IF(opt%Derive_Surface_Refl.and.RTV(nt)%mth_Azi==0.and.RTV(nt)%COS_SUN>ZERO) THEN
-      print *,' FWD ',nt,size(RTV(nt)%s_Level_Refl_UP, DIM=1),size(RTV(nt)%s_Level_Refl_UP, DIM=2)
        CALL CRTM_SurfRef(Atm%n_Layers,sum( AtmOptics(nt)%Optical_Depth(:)), & ! Input  layer optical depth
         SfcOptics(nt)%Direct_Reflectivity(SfcOptics(nt)%Index_Sat_Ang,1), &
         SfcOptics(nt)%Index_Sat_Ang, RTSolution(ln,m)%Surface_Planck_Radiance, &

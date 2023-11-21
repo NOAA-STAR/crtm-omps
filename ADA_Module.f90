@@ -87,11 +87,16 @@ CONTAINS
     END DO
     S0a(L) = S0(j)
  101 CONTINUE
+! see equations in the paper
+!  Liu, Q., Yan, B., Garrett, K., Ma, Y., Liang, X., Huang, J., Wang, W., Cao, Y. (2022). 
+!    Deriving Surface Reflectance from Visible/Near Infrared and Ultraviolet Satellite 
+!    Observations Through the Community Radiative Transfer Model, in IEEE Journal of Selected 
+!    Topics in Applied Earth Observations and Remote Sensing, doi: 10.1109/JSTARS.2022.3149767.
      S0a(3) = RTV%s_Level_Rad_UP(j,0)
-     Ref_0 = S0a(1) - RTV%s_Level_Rad_UP(j,0)
-     Rfac = (S0a(2) - S0a(1))/(S0a(3) - S0a(1))
-     Rsphere = (Rfac*dire-SRef(2))/(SRef(2)*dire*(Rfac-ONE))
-     Ref_1 = (Rsphere - ONE/dire) * Ref_0
+     Ref_0 = S0a(1) - RTV%s_Level_Rad_UP(j,0)                ! = delta Eq.(10c)
+     Rfac = (S0a(2) - S0a(1))/(S0a(3) - S0a(1))              ! = A (Eq.(10d)
+     Rsphere = (Rfac*dire-SRef(2))/(SRef(2)*dire*(Rfac-ONE)) ! Eq.(10a)
+     Ref_1 = (Rsphere - ONE/dire) * Ref_0                    ! = beta Eq.(10b)
     RETURN
   END SUBROUTINE CRTM_SurfRef
 !  

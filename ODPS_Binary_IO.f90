@@ -610,7 +610,7 @@ CONTAINS
     INTEGER(Long) :: n_Channels
     INTEGER(Long) :: n_Coeffs
     INTEGER(Long) :: n_OPIndex
-    INTEGER(Long) :: n_OCoeffs
+    INTEGER(Long) :: n_OCoeffs, nRec
 
     ! Read the Release and Version information
     ! ----------------------------------------
@@ -799,6 +799,28 @@ CONTAINS
         CALL Read_Cleanup(); RETURN
       END IF
     END IF
+
+  IF( ODPS%Sensor_Type == 4 ) THEN
+    READ( FileID, IOSTAT=IO_Status ) ODPS%nFOVs
+    IF ( io_status /= 0 .or. ODPS%nFOVs == 0 ) THEN
+      print *,' single FOV Tau UV coeff '
+      IO_Status = 0
+      RETURN
+    ELSE
+      print *,' nFOVs in TauCoeff = ',IO_Status, ODPS%nFOVs
+      Allocate( ODPS%AllC(size(ODPS%C),ODPS%nFOVs) )
+      Allocate( ODPS%Alln_Predictors(size(ODPS%n_Predictors,DIM=1),n_Channels,ODPS%nFOVs) )
+      Allocate( ODPS%AllPos_Index(size(ODPS%Pos_Index,DIM=1),n_Channels,ODPS%nFOVs) )      
+
+      READ( FileID, IOSTAT=IO_Status ) ODPS%AllC
+      print *,' size AllC ',size(ODPS%AllC,DIM=1),size(ODPS%AllC,DIM=2)
+      READ( FileID, IOSTAT=IO_Status ) ODPS%Alln_Predictors
+      READ( FileID, IOSTAT=IO_Status ) ODPS%AllPos_Index
+      RETURN
+    END IF
+
+  END IF
+
 
   CONTAINS
   

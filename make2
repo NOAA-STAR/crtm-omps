@@ -18,7 +18,7 @@ ARFLAGS = crvs
 RANLIB  = ranlib
 INSTALL      = /usr/bin/install -c
 INSTALL_DATA = ${INSTALL} -m 644
-LIBS = -L /data/starfs1/libs/netcdf-4.2-ifort/lib -lnetcdff -I /data/starfs1/libs/netcdf-4.2-ifort/include 
+LIBS = -L /data/starfs1/libs/netcdf-4.2-ifort/lib -lnetcdff -L /data/starfs1/libs/hdf5-1.10.6-ifort/lib -lhdf5 -I /data/starfs1/libs/netcdf-4.2-ifort/include   -I /data/starfs1/libs/hdf5-1.10.6-ifort/include 
 
 # The library name
 LIBRARY = lib$(tarname).a

@@ -12,6 +12,11 @@
 !       Modified by:    Tong Zhu, 18-Nov-2008
 !                       tong.zhu@noaa.gov
 !
+!       Modified by:    James Rosinski, 08-Feb-2019
+!                       Rosinski@ucar.edu
+!
+! (C) Copyright 2019 UCAR
+!
 
 MODULE ODPS_Predictor
 
@@ -71,25 +76,20 @@ MODULE ODPS_Predictor
   PUBLIC :: GROUP_2
   PUBLIC :: GROUP_3
   PUBLIC :: ALLOW_OPTRAN
-  PUBLIC :: N_G
 
 
   ! -----------------
   ! Module parameters
   ! -----------------
-  CHARACTER(*), PRIVATE, PARAMETER :: MODULE_VERSION_ID = &
-  '$Id: $'
-
   ! Dimensions of each predictor group.
-  INTEGER, PARAMETER  :: N_G = 4
-  INTEGER, PARAMETER  :: N_COMPONENTS_G(N_G)     = (/8,   5, 2  , 2/)
-  INTEGER, PARAMETER  :: N_ABSORBERS_G(N_G)      = (/ 6,  3,  1,  1/)
-  INTEGER, PARAMETER  :: MAX_N_PREDICTORS_G(N_G) = (/18, 15, 14, 14/)
+  INTEGER, PARAMETER  :: N_G = 3
+  INTEGER, PARAMETER  :: N_COMPONENTS_G(N_G)     = (/8,   5, 2/)
+  INTEGER, PARAMETER  :: N_ABSORBERS_G(N_G)      = (/6,   3, 1/)
+  INTEGER, PARAMETER  :: MAX_N_PREDICTORS_G(N_G) = (/18, 15, 14/)
   ! Group index (note, group indexes 4 - 6 are reserved for Zeeman sub-algorithms
   INTEGER, PARAMETER :: GROUP_1 = 1
   INTEGER, PARAMETER :: GROUP_2 = 2
   INTEGER, PARAMETER :: GROUP_3 = 3
-  INTEGER, PARAMETER :: GROUP_4 = 4
 
   ! Number of predictors for each component
   INTEGER, PARAMETER :: N_PREDICTORS_G1(8) = (/ &
@@ -115,10 +115,6 @@ MODULE ODPS_Predictor
                      7, &  ! dry gas
                     14 /)  ! water vapor line and continua
 
-  INTEGER, PARAMETER :: N_PREDICTORS_G4(2) = (/ &
-                     7, &  ! dry gas
-                    11 /)  ! ozone
-
 
   ! Component IDs
   INTEGER,  PARAMETER :: TOT_ComID = 10    ! total tau
@@ -135,10 +131,6 @@ MODULE ODPS_Predictor
   ! Microwave sensors
   INTEGER,  PARAMETER :: EDRY_ComID = 113  ! Effective dry
   INTEGER,  PARAMETER :: WET_ComID = 12  ! water vapor line & no continua
-
-  ! UV sensor Component indexes (sequence index in an array)
-  INTEGER, PARAMETER :: COMP_DRY_UV = 1
-  INTEGER, PARAMETER :: COMP_OZO_UV = 2
 
   ! IR sensor Component indexes (sequence index in an array)
   INTEGER, PARAMETER :: COMP_DRY_IR = 1
@@ -176,10 +168,6 @@ MODULE ODPS_Predictor
                                   EDRY_ComID, &
                                    WET_ComID /)
 
-  INTEGER, PARAMETER :: COMPONENT_ID_MAP_G4(2) = (/ &
-                                   13, &
-                                   14 /)
-
   ! Absorber IDs (HITRAN)
   INTEGER, PARAMETER ::   H2O_ID =  1
   INTEGER, PARAMETER ::   CO2_ID =  2
@@ -187,11 +175,6 @@ MODULE ODPS_Predictor
   INTEGER, PARAMETER ::   N2O_ID =  4
   INTEGER, PARAMETER ::    CO_ID =  5
   INTEGER, PARAMETER ::   CH4_ID =  6
-
-  ! UV
-  ! Absorber (Molecule) indexes for accessing absorber profile array
-  INTEGER,  PARAMETER :: ABS_O3_UV  = 1
-
 
   ! Absorber (Molecule) indexes for accessing absorber profile array
   INTEGER,  PARAMETER :: ABS_H2O_IR = 1
@@ -219,9 +202,6 @@ MODULE ODPS_Predictor
 
   INTEGER,  PARAMETER :: ABSORBER_ID_MAP_G3(1) = (/ &
                                            H2O_ID /)
-
-  INTEGER,  PARAMETER :: ABSORBER_ID_MAP_G4(1) = (/ &
-                                           O3_ID /)
   ! Literal constants
   REAL(fp), PARAMETER :: ZERO      = 0.0_fp
   REAL(fp), PARAMETER :: ONE       = 1.0_fp
@@ -723,10 +703,9 @@ CONTAINS
     GAzp_sum  = ZERO
     GATzp_ref = ZERO
     GATzp_sum = ZERO
-    
-    
+
     Layer_Loop : DO k = 1, n_Layers
-    
+
       ! weight for integrated variables
       if(k == 1)then
             PDP = Ref_Level_Pressure(0) * &
@@ -778,7 +757,6 @@ CONTAINS
       END IF
 
     END DO Layer_Loop
-    
 
     !----------------------------------------------------------------
     ! Call the group specific routine for remaining computation; all
@@ -790,8 +768,6 @@ CONTAINS
          CALL ODPS_Compute_Predictor_IR()
       CASE( GROUP_3 )
          CALL ODPS_Compute_Predictor_MW()
-      CASE( GROUP_4 )
-         CALL ODPS_Compute_Predictor_UV()
     END SELECT
 
 CONTAINS
@@ -829,6 +805,20 @@ CONTAINS
       REAL(fp) ::    CH4_A
       REAL(fp) ::    CH4_R
       REAL(fp) ::    CH4_ACH4zp
+
+      ! Silence gfortran complaints about maybe-used-uninit by init to HUGE()
+      N2O_S       = HUGE(N2O_S)
+      N2O_R       = HUGE(N2O_R)
+      N2O_A       = HUGE(N2O_A)
+      N2O         = HUGE(N2O)
+      CO_S        = HUGE(CO_S)
+      CO_R        = HUGE(CO_R)
+      CO_ACOdCOzp = HUGE(CO_ACOdCOzp)
+      CO_A        = HUGE(CO_A)
+      CH4_R       = HUGE(CH4_R)
+      CH4_ACH4zp  = HUGE(CH4_ACH4zp)
+      CH4_A       = HUGE(CH4_A)
+      CH4         = HUGE(CH4)
 
       Layer_Loop : DO k = 1, n_Layers
 
@@ -1021,77 +1011,6 @@ CONTAINS
       END DO Layer_Loop
 
     END SUBROUTINE ODPS_Compute_Predictor_IR
-
-    SUBROUTINE ODPS_Compute_Predictor_UV()
-
-      ! ---------------
-      ! Local variables
-      ! ---------------
-      INTEGER    ::    k ! n_Layers, n_Levels
-      REAL(fp) ::    DT
-      REAL(fp) ::    T
-      REAL(fp) ::    T2
-      REAL(fp) ::    DT2
-      REAL(fp) ::    O3
-      REAL(fp) ::    O3_A
-      REAL(fp) ::    O3_R
-
-      Layer_Loop : DO k = 1, n_Layers
-
-        !------------------------------------------
-        !  Relative Temperature
-        !------------------------------------------
-        dT = Temperature(k) - Ref_Temperature(k)
-        T = Temperature(k) / Ref_Temperature(k)
-
-        !-------------------------------------------
-        !  Abosrber amount scalled by the reference
-        !-------------------------------------------
-        O3  = Absorber(k,ABS_O3_UV) /Ref_absorber(k,ABS_O3_UV)
-
-        ! Combinations of variables common to all predictor groups
-        T2   = T*T
-        DT2  = DT*ABS( DT )
-
-        O3_A = SECANG(k)*O3
-        O3_R = SQRT( O3_A )
-
-        ! set number of predictors
-        Predictor%n_CP = N_PREDICTORS_G4
-
-       !#-------------------------------------------------------------------#
-       !#        -- Predictors --                                           #
-       !#-------------------------------------------------------------------#
-
-        !  ----------------------
-        !   Fixed (Dry) predictors
-        !  ----------------------
-        Predictor%X(k, 1, COMP_DRY_UV)  = SECANG(k)
-        Predictor%X(k, 2, COMP_DRY_UV)  = SECANG(k) * T
-        Predictor%X(k, 3, COMP_DRY_UV)  = SECANG(k) * T2
-        Predictor%X(k, 4, COMP_DRY_UV)  = T
-        Predictor%X(k, 5, COMP_DRY_UV)  = SECANG(k) * SECANG(k)
-        Predictor%X(k, 6, COMP_DRY_UV)  = T2
-        Predictor%X(k, 7, COMP_DRY_UV)  = Tz(k)
-
-        !  -----------------------
-        !  Ozone predictors  RTTOV ver 1
-        !  -----------------------
-        Predictor%X(k, 1, COMP_OZO_UV)  = O3_A                                        ! SECANG(k)*O3
-        Predictor%X(k, 2, COMP_OZO_UV)  = O3_A*DT                                     ! SECANG(k)*O3*dT
-        Predictor%X(k, 3, COMP_OZO_UV)  = O3_A*O3            *GAzp(k,ABS_O3_UV)       ! SECANG(k)*O3**2*O3w 
-        Predictor%X(k, 4, COMP_OZO_UV)  = O3_A*O3_A                                   ! (SECANG(k)*O3)**2
-        Predictor%X(k, 5, COMP_OZO_UV)  = O3_A               *GAzp(k,ABS_O3_UV)       ! SECANG(k)*O3*O3w 
-        Predictor%X(k, 6, COMP_OZO_UV)  = O3_A*SQRT(SECANG(k)*GAzp(k,ABS_O3_UV))      ! SECANG(k)*O3*sqrt(SECANG(k)*O3w)
-        Predictor%X(k, 7, COMP_OZO_UV)  = O3_R*DT   !T*T*T                            ! SQRT(SECANG(k)*O3)*dT    
-        Predictor%X(k, 8, COMP_OZO_UV)  = O3_R                                        ! SQRT(SECANG(k)*O3)  
-        Predictor%X(k, 9, COMP_OZO_UV)  = O3_R*O3   /GAzp(k,ABS_O3_UV)                ! SQRT(SECANG(k)*O3)*O3/O3w
-        Predictor%X(k,10, COMP_OZO_UV)  = SECANG(k) *GAzp(k,ABS_O3_UV)                ! SECANG(k)*O3w
-        Predictor%X(k,11, COMP_OZO_UV)  = (SECANG(k)*GAzp(k,ABS_O3_UV))**2            ! (SECANG(k)*O3w)**2
-
-      END DO Layer_Loop
-
-    END SUBROUTINE ODPS_Compute_Predictor_UV
 
     SUBROUTINE ODPS_Compute_Predictor_MW()
 
@@ -1304,7 +1223,12 @@ CONTAINS
     REAL(fp) ::    GAzp_TL(SIZE(Absorber, DIM=1), SIZE(Absorber, DIM=2))
     REAL(fp) ::    GATzp_sum_TL(SIZE(Absorber, DIM=2))
     REAL(fp) ::    GATzp_TL(SIZE(Absorber, DIM=1), SIZE(Absorber, DIM=2))
-    TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+!JR Static initialization means only 1 copy of the variable. OpenMP over profiles
+!JR means $OPENMP_NUM_THREADS copies are needed. So change to run-time initialization
+!JR    TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+    TYPE(PAFV_type), POINTER  :: PAFV
+
+    NULLIFY(PAFV)
 
     ! use short name
     PAFV => Predictor%PAFV
@@ -1354,8 +1278,6 @@ CONTAINS
          CALL ODPS_Compute_Predictor_IR_TL()
       CASE( GROUP_3 )
          CALL ODPS_Compute_Predictor_MW_TL()
-      CASE( GROUP_4 )
-         CALL ODPS_Compute_Predictor_UV_TL()
     END SELECT
 
     NULLIFY(PAFV)
@@ -1396,6 +1318,33 @@ CONTAINS
       REAL(fp) ::    CH4_R,        CH4_R_TL
       REAL(fp) ::    CH4_ACH4zp,   CH4_ACH4zp_TL
 
+      ! Silence gfortran complaints about maybe-used-uninit by init to HUGE()
+      N2O_TL        = HUGE(N2O_TL)
+      N2O_S_TL      = HUGE(N2O_S_TL)
+      N2O_S         = HUGE(N2O_S)
+      N2O_R         = HUGE(N2O_R)
+      N2O_R_TL      = HUGE(N2O_R_TL)
+      N2O           = HUGE(N2O)
+      N2O_A         = HUGE(N2O_A)
+      N2O_A_TL      = HUGE(N2O_A_TL)
+      CO_S_TL       = HUGE(CO_S_TL)
+      CO_S          = HUGE(CO_S)
+      CO_R          = HUGE(CO_R)
+      CO_R_TL       = HUGE(CO_R_TL)
+      CO_A_TL       = HUGE(CO_A_TL)
+      CO_A          = HUGE(CO_A)
+      CO_R          = HUGE(CO_R)
+      CO_ACODCOZP_TL= HUGE(CO_ACODCOZP_TL)
+      CO_ACODCOZP   = HUGE(CO_ACODCOZP)
+      CH4_TL        = HUGE(CH4_TL)
+      CH4_R_TL      = HUGE(CH4_R_TL)
+      CH4_A_TL      = HUGE(CH4_A_TL)
+      CH4_A         = HUGE(CH4_A)
+      CH4_R         = HUGE(CH4_R)
+      CH4           = HUGE(CH4)
+      CH4_ACH4ZP_TL = HUGE(CH4_ACH4ZP_TL)
+      CH4_ACH4ZP    = HUGE(CH4_ACH4ZP)
+      
       Layer_Loop : DO k = 1, n_Layers
 
         !------------------------------------------
@@ -1638,93 +1587,6 @@ CONTAINS
 
     END SUBROUTINE ODPS_Compute_Predictor_IR_TL
 
-   SUBROUTINE ODPS_Compute_Predictor_UV_TL()
-
-      ! ---------------
-      ! Local variables
-      ! ---------------
-      INTEGER    ::    k ! n_Layers, n_Levels
-      REAL(fp) ::    DT,           DT_TL
-      REAL(fp) ::    T,            T_TL
-      REAL(fp) ::    T2,           T2_TL
-      REAL(fp) ::    DT2,          DT2_TL
-      REAL(fp) ::    O3,           O3_TL
-      REAL(fp) ::    O3_A,         O3_A_TL
-      REAL(fp) ::    O3_R,         O3_R_TL
-
-      Layer_Loop : DO k = 1, n_Layers
-
-        !------------------------------------------
-        !  Relative Temperature
-        !------------------------------------------
-        dT = Temperature(k) - Ref_Temperature(k)
-        T = Temperature(k) / Ref_Temperature(k)
-        dT_TL = Temperature_TL(k)
-        T_TL = Temperature_TL(k) / Ref_Temperature(k)
-
-        !-------------------------------------------
-        !  Abosrber amount scalled by the reference
-        !-------------------------------------------
-        O3     = Absorber   (k,ABS_O3_UV)/Ref_absorber(k,ABS_O3_UV)
-
-        O3_TL  = Absorber_TL(k,ABS_O3_UV)/Ref_absorber(k,ABS_O3_UV)
-
-        ! Combinations of variables common to all predictor groups
-        T2   = T*T
-        DT2  = DT*ABS( DT )
-
-        T2_TL  = TWO*T*T_TL
-        IF( DT > ZERO) THEN
-          DT2_TL = TWO*DT*DT_TL
-        ELSE
-          DT2_TL = - TWO*DT*DT_TL
-        ENDIF
-
-        O3_A = SECANG(k)*O3
-        O3_R = SQRT( O3_A )
-
-        O3_A_TL = SECANG(k)*O3_TL
-        O3_R_TL = (POINT_5 / SQRT(O3_A)) * O3_A_TL
-
-        Predictor_TL%n_CP = N_PREDICTORS_G4
-
-       !#-------------------------------------------------------------------#
-       !#        -- Predictors --                                           #
-       !#-------------------------------------------------------------------#
-
-        !  ----------------------
-        !   Fixed (Dry) predictors
-        !  ----------------------
-        Predictor_TL%X(k, 1, COMP_DRY_UV)  = ZERO
-        Predictor_TL%X(k, 2, COMP_DRY_UV)  = SECANG(k) * T_TL
-        Predictor_TL%X(k, 3, COMP_DRY_UV)  = SECANG(k) * T2_TL
-        Predictor_TL%X(k, 4, COMP_DRY_UV)  = T_TL
-        Predictor_TL%X(k, 5, COMP_DRY_UV)  = ZERO
-        Predictor_TL%X(k, 6, COMP_DRY_UV)  = T2_TL
-        Predictor_TL%X(k, 7, COMP_DRY_UV)  = Tz_TL(k)
-
-        !  -----------------------
-        !  Ozone predictors
-        !  -----------------------
-        Predictor_TL%X(k, 1, COMP_OZO_UV)  = O3_A_TL
-        Predictor_TL%X(k, 2, COMP_OZO_UV)  = O3_A_TL*DT + O3_A*DT_TL
-        Predictor_TL%X(k, 3, COMP_OZO_UV)  = O3_A_TL*O3*PAFV%GAzp(k,ABS_O3_IR) + O3_A*O3_TL*PAFV%GAzp(k,ABS_O3_IR) &
-                                             + O3_A*O3*GAzp_TL(k,ABS_O3_IR)
-        Predictor_TL%X(k, 4, COMP_OZO_UV)  = TWO*O3_A*O3_A_TL
-        Predictor_TL%X(k, 5, COMP_OZO_UV)  = O3_A_TL*PAFV%GAzp(k,ABS_O3_IR) + O3_A*GAzp_TL(k,ABS_O3_IR)
-        Predictor_TL%X(k, 6, COMP_OZO_UV)  = O3_A_TL*SQRT(SECANG(k)*PAFV%GAzp(k,ABS_O3_IR)) + &
-                                             POINT_5*O3_A*SQRT(SECANG(k)/PAFV%GAzp(k,ABS_O3_IR))* &
-                                             GAzp_TL(k,ABS_O3_IR)
-        Predictor_TL%X(k, 7, COMP_OZO_UV)  = O3_R_TL*DT + O3_R*DT_TL  !T*T*T
-        Predictor_TL%X(k, 8, COMP_OZO_UV)  = O3_R_TL
-        Predictor_TL%X(k, 9, COMP_OZO_UV)  = O3_R_TL*O3/PAFV%GAzp(k,ABS_O3_IR) + O3_R*O3_TL/PAFV%GAzp(k,ABS_O3_IR) &
-                                             - O3_R*O3*GAzp_TL(k,ABS_O3_IR)/PAFV%GAzp(k,ABS_O3_IR)**2
-        Predictor_TL%X(k,10, COMP_OZO_UV)  = SECANG(k)*GAzp_TL(k,ABS_O3_IR)
-        Predictor_TL%X(k,11, COMP_OZO_UV)  = TWO*SECANG(k)**2 * PAFV%GAzp(k,ABS_O3_IR)*GAzp_TL(k,ABS_O3_IR)
-      END DO Layer_Loop
-
-    END SUBROUTINE ODPS_Compute_Predictor_UV_TL
-
     SUBROUTINE ODPS_Compute_Predictor_MW_TL()
 
       ! ---------------
@@ -1958,8 +1820,13 @@ CONTAINS
     REAL(fp) ::    GAzp_AD(SIZE(Absorber, DIM=1), SIZE(Absorber, DIM=2))
     REAL(fp) ::    GATzp_sum_AD(SIZE(Absorber, DIM=2))
     REAL(fp) ::    GATzp_AD(SIZE(Absorber, DIM=1), SIZE(Absorber, DIM=2))
-    TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+!JR Static initialization means only 1 copy of the variable. OpenMP over profiles
+!JR means $OPENMP_NUM_THREADS copies are needed. So change to run-time initialization
+!    TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+    TYPE(PAFV_type), POINTER  :: PAFV
 
+!JR Looks silly since next stmt sets PAFV, but nullify here to guard agains future code changes
+    NULLIFY(PAFV)
     ! use short name
     PAFV => Predictor%PAFV
 
@@ -1992,8 +1859,6 @@ CONTAINS
          CALL ODPS_Compute_Predictor_IR_AD()
       CASE( GROUP_3 )
          CALL ODPS_Compute_Predictor_MW_AD()
-      CASE( GROUP_4 )
-         CALL ODPS_Compute_Predictor_UV_AD()
     END SELECT
 
     Adjoint_Layer_Loop : DO k = n_Layers, 1, -1
@@ -2594,155 +2459,6 @@ CONTAINS
 
     END SUBROUTINE ODPS_Compute_Predictor_IR_AD
 
-    SUBROUTINE ODPS_Compute_Predictor_UV_AD()
-
-      ! ---------------
-      ! Local variables
-      ! ---------------
-      INTEGER  :: k ! n_Layers, n_Levels
-      REAL(fp) :: DT,            DT_AD
-      REAL(fp) :: T,             T_AD
-      REAL(fp) :: T2,            T2_AD
-      REAL(fp) :: DT2,           DT2_AD
-      REAL(fp) :: O3,            O3_AD
-      REAL(fp) :: O3_A,          O3_A_AD
-      REAL(fp) :: O3_R,          O3_R_AD
-
-      DT_AD          = ZERO
-      T_AD           = ZERO
-      T2_AD          = ZERO
-      DT2_AD         = ZERO
-      O3_AD          = ZERO
-      O3_A_AD        = ZERO
-      O3_R_AD        = ZERO
-
-      Layer_Loop : DO k = n_Layers, 1, -1
-
-        !------------------------------------------
-        !  Relative Temperature
-        !------------------------------------------
-        dT = Temperature(k) - Ref_Temperature(k)
-        T = Temperature(k) / Ref_Temperature(k)
-
-        !-------------------------------------------
-        !  Abosrber amount scalled by the reference
-        !-------------------------------------------
-        O3  = Absorber(k,ABS_O3_UV)/Ref_absorber(k,ABS_O3_UV)
-
-        ! Combinations of variables common to all predictor groups
-        T2   = T*T
-        DT2  = DT*ABS( DT )
-
-        O3_A = SECANG(k)*O3
-        O3_R = SQRT( O3_A )
-
-
-       !#-------------------------------------------------------------------#
-       !#        -- Predictors --                                           #
-       !#-------------------------------------------------------------------#
-
-        !  ----------------------
-        !   Fixed (Dry) predictors
-        !  ----------------------
-        T_AD     = T_AD                                            &
-                   + Predictor_AD%X(k, 2, COMP_DRY_UV) * SECANG(k) &
-                   + Predictor_AD%X(k, 4, COMP_DRY_UV)
-        T2_AD    = T2_AD                                           &
-                   + Predictor_AD%X(k, 3, COMP_DRY_UV) * SECANG(k) &
-                   + Predictor_AD%X(k, 6, COMP_DRY_UV)
-        Tz_AD(k) = Tz_AD(k) + Predictor_AD%X(k, 7, COMP_DRY_UV)
-
-        Predictor_AD%X(k, 1, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 2, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 3, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 4, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 5, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 6, COMP_DRY_UV)  = ZERO
-        Predictor_AD%X(k, 7, COMP_DRY_UV)  = ZERO
-
-
-        !  -----------------------
-        !  Ozone predictors
-        !  -----------------------
-
-        O3_A_AD = O3_A_AD                                                               &
-                  + Predictor_AD%X(k, 1, COMP_OZO_UV)                                   &
-                  + Predictor_AD%X(k, 2, COMP_OZO_UV)*DT                                &
-                  + Predictor_AD%X(k, 3, COMP_OZO_UV)*O3*PAFV%GAzp(k,ABS_O3_UV)         &
-                  + Predictor_AD%X(k, 4, COMP_OZO_UV)*TWO*O3_A                          &
-                  + Predictor_AD%X(k, 5, COMP_OZO_UV)*PAFV%GAzp(k,ABS_O3_UV)            &
-                  + Predictor_AD%X(k, 6, COMP_OZO_UV)*SQRT(SECANG(k)*PAFV%GAzp(k,ABS_O3_UV))
-
-        DT_AD   = DT_AD                                                                 &
-                  + Predictor_AD%X(k, 2, COMP_OZO_UV)*O3_A                              &
-                  + Predictor_AD%X(k, 7, COMP_OZO_UV)*O3_R
-
-        O3_AD   = O3_AD                                                                 &
-                  + Predictor_AD%X(k, 3, COMP_OZO_UV)*O3_A*PAFV%GAzp(k,ABS_O3_UV)       &
-                  + Predictor_AD%X(k, 9, COMP_OZO_UV)*O3_R/PAFV%GAzp(k,ABS_O3_UV)
-
-        GAzp_AD(k,ABS_O3_UV) = GAzp_AD(k,ABS_O3_UV)                                     &
-                  + Predictor_AD%X(k, 3, COMP_OZO_UV)*O3_A*O3                           &
-                  + Predictor_AD%X(k, 5, COMP_OZO_UV)*O3_A                              &
-                  + Predictor_AD%X(k, 6, COMP_OZO_UV)*POINT_5*O3_A*SQRT(SECANG(k)/PAFV%GAzp(k,ABS_O3_UV)) &
-                  - Predictor_AD%X(k, 9, COMP_OZO_UV)*O3_R*O3/PAFV%GAzp(k,ABS_O3_UV)**2 &
-                  + Predictor_AD%X(k,10, COMP_OZO_UV)*SECANG(k)                         &
-                  + Predictor_AD%X(k,11, COMP_OZO_UV)*TWO*SECANG(k)**2*PAFV%GAzp(k,ABS_O3_UV)
-
-        O3_R_AD = O3_R_AD                                                               &
-                  + Predictor_AD%X(k, 7, COMP_OZO_UV)*DT                                &
-                  + Predictor_AD%X(k, 8, COMP_OZO_UV)                                   &
-                  + Predictor_AD%X(k, 9, COMP_OZO_UV)*O3/PAFV%GAzp(k,ABS_O3_UV)
-
-
-        Predictor_AD%X(k, 1, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 2, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 3, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 4, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 5, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 6, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 7, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 8, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k, 9, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k,10, COMP_OZO_UV)  = ZERO
-        Predictor_AD%X(k,11, COMP_OZO_UV)  = ZERO
-
-
-        ! Combinations of variables common to all predictor groups
-
-        O3_A_AD = O3_A_AD + O3_R_AD * POINT_5 / SQRT(O3_A)
-        O3_AD = O3_AD + O3_A_AD * SECANG(k)
-        O3_A_AD = ZERO
-        O3_R_AD = ZERO
-
-        IF( DT > ZERO) THEN
-          DT_AD = DT_AD + DT2_AD*TWO*DT
-        ELSE
-          DT_AD = DT_AD - DT2_AD*TWO*DT
-        ENDIF
-        T_AD = T_AD + T2_AD*TWO*T
-        T2_AD   = ZERO
-        DT2_AD  = ZERO
-
-        !-------------------------------------------
-        !  Abosrber amount scalled by the reference
-        !-------------------------------------------
-        Absorber_AD(k,ABS_O3_UV)  = Absorber_AD(k,ABS_O3_UV)             &
-                                  + O3_AD / Ref_absorber(k,ABS_O3_UV)
-        O3_AD  = ZERO
-
-        !------------------------------------------
-        !  Relative Temperature
-        !------------------------------------------
-        Temperature_AD(k) = Temperature_AD(k) + T_AD/Ref_Temperature(k) &
-                          + dT_AD
-        dT_AD = ZERO
-        T_AD  = ZERO
-
-      END DO Layer_Loop
-
-    END SUBROUTINE ODPS_Compute_Predictor_UV_AD
-
     SUBROUTINE ODPS_Compute_Predictor_MW_AD()
 
       ! ---------------
@@ -3212,8 +2928,13 @@ CONTAINS
                  t2_TL,    s_t_TL, s_p_TL, Inverse_TL, d_Absorber_TL
      REAL(fp) :: Int_vapor_prev_TL, Int_vapor_TL, AveA_TL, ap1_TL
      INTEGER  :: i, k
-     TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+!JR Static initialization means only 1 copy of the variable. OpenMP over profiles
+!JR means $OPENMP_NUM_THREADS copies are needed. So change to run-time initialization
+!JR     TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+     TYPE(PAFV_type), POINTER  :: PAFV
 
+!JR Looks silly since next stmt sets PAFV, but nullify here to guard agains future code changes
+     NULLIFY(PAFV)
      ! short name
      PAFV => Predictor%PAFV
 
@@ -3397,8 +3118,13 @@ CONTAINS
      REAL(fp) :: t2_AD, s_t_AD, s_p_AD, Inverse_AD, d_Absorber_AD
      REAL(fp) :: Int_vapor_prev_AD, Int_vapor_AD, AveA_AD, ap1_AD
      INTEGER  :: i, k
-     TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+!JR Static initialization means only 1 copy of the variable. OpenMP over profiles
+!JR means $OPENMP_NUM_THREADS copies are needed. So change to run-time initialization
+!JR     TYPE(PAFV_type), POINTER  :: PAFV => NULL()
+     TYPE(PAFV_type), POINTER  :: PAFV
 
+!JR Looks silly since next stmt sets PAFV, but nullify here to guard agains future code changes
+     NULLIFY(PAFV)
      ! short name
      PAFV => Predictor%PAFV
 
@@ -3537,8 +3263,8 @@ CONTAINS
          Component_ID = COMPONENT_ID_MAP_G2(Component_Index)
       CASE( GROUP_3 )
          Component_ID = COMPONENT_ID_MAP_G3(Component_Index)
-      CASE( GROUP_4 )
-         Component_ID = COMPONENT_ID_MAP_G4(Component_Index)
+      CASE DEFAULT
+         Component_ID = HUGE(Component_ID)  ! Entry not found: Hopefully induce code to fail 
     END SELECT
   END FUNCTION ODPS_Get_Component_ID
 
@@ -3554,16 +3280,16 @@ CONTAINS
           Absorber_ID = ABSORBER_ID_MAP_G2(Absorber_Index)
       CASE( GROUP_3 )
           Absorber_ID = ABSORBER_ID_MAP_G3(Absorber_Index)
-      CASE( GROUP_4 )
-          Absorber_ID = ABSORBER_ID_MAP_G4(Absorber_Index)
-    END SELECT
+      CASE DEFAULT
+          Absorber_ID = HUGE(Absorber_ID)  ! Entry not found: Hopefully induce code to fail 
+      END SELECT
   END FUNCTION ODPS_Get_Absorber_ID
 
 
   PURE FUNCTION ODPS_Get_Ozone_Component_ID(Group_Index) RESULT( Ozone_Component_ID )
     INTEGER, INTENT(IN) :: Group_Index
     INTEGER :: Ozone_Component_ID
-    IF( any(Group_Index == [GROUP_1, GROUP_2, GROUP_4]) ) THEN
+    IF( Group_Index == GROUP_1 .OR. Group_Index == GROUP_1)THEN
       Ozone_Component_ID = OZO_ComID
     ELSE
       Ozone_Component_ID = -1

@@ -144,7 +144,7 @@ MODULE CRTM_Options_Define
     REAL(Double) :: depolarization = 0.0279_fp  !  0.031_fp
     ! User defined number of RT solver streams (streams up + streams down)
     LOGICAL       :: Use_n_Streams = .FALSE.
-    INTEGER(Long) :: n_Streams = 0
+    INTEGER(Long) :: n_Streams = 0, nFOV = 0
     INTEGER(Long) :: n_Stokes = 1
     INTEGER(Long) :: n_Legendre_Terms = 0
 

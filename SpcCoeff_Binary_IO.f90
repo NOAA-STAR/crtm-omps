@@ -392,6 +392,8 @@ CONTAINS
       SpcCoeff%Sensor_Type     , &
       SpcCoeff%WMO_Satellite_Id, &
       SpcCoeff%WMO_Sensor_Id   
+      
+
     IF ( io_stat /= 0 ) THEN
       WRITE( msg,'("Error reading sensor ids. IOSTAT = ",i0)' ) io_stat
       CALL Read_Cleanup(); RETURN
@@ -429,6 +431,23 @@ CONTAINS
         SpcCoeff%Band_C2                   , &
         SpcCoeff%Cosmic_Background_Radiance, &
         SpcCoeff%Solar_Irradiance
+      IF( SpcCoeff%Sensor_Type == 4 ) THEN
+         SpcCoeff%nFOVs = 0
+         READ ( fid, IOSTAT=io_stat, IOMSG=io_msg ) SpcCoeff%nFOVs
+         IF ( io_stat /= 0 .or. SpcCoeff%nFOVs==0 ) THEN
+           print *,' single FOV UV coeff '
+           io_stat = 0
+           RETURN
+         ELSE
+      print *,' nFOVs = ',io_stat,SpcCoeff%nFOVs
+      Allocate( SpcCoeff%AllFrequency(size(SpcCoeff%Wavenumber),SpcCoeff%nFOVs) )
+      Allocate( SpcCoeff%AllWavenumber(size(SpcCoeff%Wavenumber),SpcCoeff%nFOVs) )
+      Allocate( SpcCoeff%AllSolar_Irradiance(size(SpcCoeff%Wavenumber),SpcCoeff%nFOVs) )
+        READ ( fid, IOSTAT=io_stat, IOMSG=io_msg ) SpcCoeff%AllSolar_Irradiance, &
+        SpcCoeff%AllWavenumber , SpcCoeff%AllFrequency
+        RETURN
+         END IF
+       END IF
     ELSE
         msg = 'Unrecognized SpcCoeff version. '//TRIM(io_msg)
         CALL Read_Cleanup(); RETURN

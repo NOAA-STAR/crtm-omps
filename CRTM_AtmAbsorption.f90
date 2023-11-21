@@ -227,7 +227,7 @@ CONTAINS
                ChannelIndex  , &  ! Input
                Predictor%ODPS, &  ! Input
                AtmOptics       )  ! Output
-
+      
       ! SSU instrument specific
       CASE( ODSSU_ALGORITHM )
         CALL ODSSU_Compute_Weights( &

@@ -28,6 +28,7 @@ MODULE CRTM_Forward_Module
                                         AIRCRAFT_PRESSURE_THRESHOLD, &
                                         MIN_COVERAGE_THRESHOLD, &
                                         SCATTERING_ALBEDO_THRESHOLD
+  USE CRTM_TauCoeff,              ONLY: TC
   USE CRTM_SpcCoeff,              ONLY: SC, &
                                         SpcCoeff_IsVisibleSensor, &
                                         SpcCoeff_IsMicrowaveSensor, &
@@ -332,13 +333,20 @@ CONTAINS
     ! Determine how many threads to use for profiles and channels
     ! After profiles get what they need, we use the left-over threads
     ! to parallelize channels
-    IF ( n_omp_threads <= n_Profiles ) THEN
+!    IF ( n_omp_threads <= n_Profiles ) THEN
+
+    IF ( n_omp_threads < 0 ) THEN
+    
       n_profile_threads = n_omp_threads
       n_channel_threads = 1
       CALL OMP_SET_MAX_ACTIVE_LEVELS(1)
     ELSE
-      n_profile_threads = n_Profiles
-      n_channel_threads = MIN(n_Channels, n_omp_threads / n_Profiles)
+
+      n_profile_threads = 1
+      n_channel_threads = MIN(n_Channels, n_omp_threads)
+
+!      n_profile_threads = n_Profiles
+!      n_channel_threads = MIN(n_Channels, n_omp_threads / n_Profiles)
 
 !    IF(SpcCoeff_IsInfraredSensor(SC(1)) .OR. &
 !                SpcCoeff_IsMicrowaveSensor(SC(1)) ) THEN
@@ -354,6 +362,7 @@ CONTAINS
       END IF
     END IF
 
+
 !    WRITE(6,*) 
 !    WRITE(6,'("   Using",i3," OpenMP threads =",i3," for profiles and",i3," for channels.")') &
 !         n_omp_threads, n_profile_threads, n_channel_threads
@@ -365,6 +374,7 @@ CONTAINS
 !JR First loop just checks validity of Atmosphere(m) contents
 !$OMP PARALLEL DO PRIVATE ( nc, Message ) NUM_THREADS(n_profile_threads)
     Profile_Loop1: DO m = 1, n_Profiles
+ 
        ! Fix for cloud_Fraction < MIN_COVERAGE_THRESHOLD
        IF ( Atmosphere(m)%n_Clouds > 0) THEN
           !** clear clouds where cloud_fraction < threshold
@@ -747,6 +757,16 @@ CONTAINS
         ! Shorter name
         SensorIndex = ChannelInfo(n)%Sensor_Index
 
+      IF ( Options_Present ) THEN
+        IF( Opt%nFOV > 0 .and. Opt%nFOV <= SC(SensorIndex)%nFOVs ) THEN
+          SC(SensorIndex)%Solar_Irradiance = SC(SensorIndex)%AllSolar_Irradiance(:,Opt%nFOV)
+          SC(SensorIndex)%Wavenumber = SC(SensorIndex)%AllWavenumber(:,Opt%nFOV)
+          TC%ODPS(SensorIndex)%C(:) = TC%ODPS(SensorIndex)%AllC(:,Opt%nFOV)
+          TC%ODPS(SensorIndex)%n_Predictors(:,:) = TC%ODPS(SensorIndex)%Alln_Predictors(:,:,Opt%nFOV)
+          TC%ODPS(SensorIndex)%Pos_Index(:,:) = TC%ODPS(SensorIndex)%AllPos_Index(:,:,Opt%nFOV)
+         END IF
+      END IF 
+
 
         ! Check if antenna correction to be applied for current sensor
         compute_antenna_correction = ( Opt%Use_Antenna_Correction               .AND. &
@@ -811,6 +831,7 @@ CONTAINS
         ! counters for thread loop
         ! -----------------------------
         n_sensor_channels = ChannelInfo(n)%n_Channels
+        
 !        chunk_ch = n_sensor_channels / n_channel_threads
         chunk_ch = CEILING( REAL(n_sensor_channels) / REAL(n_channel_threads) )
         !count inactive channels in each chunk
@@ -818,7 +839,7 @@ CONTAINS
         DO l = 1, n_sensor_channels
           IF ( .NOT. ChannelInfo(n)%Process_Channel(l) ) THEN
 !            nt = l / chunk_ch + 1
-            nt = FLOOR( REAL(l) / REAL(chunk_ch) ) + 1
+            nt = FLOOR( REAL(l-1) / REAL(chunk_ch) ) + 1
             n_inactive_channels(nt) = n_inactive_channels(nt) + 1
           END IF
         END DO
